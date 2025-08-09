@@ -19,13 +19,10 @@ class ImageProcessor {
 
   async processImages(): Promise<void> {
     try {
-      // Kiểm tra thư mục đầu vào có tồn tại không
       await this.validatePaths();
 
-      // Tạo thư mục đầu ra nếu chưa có
       await this.ensureOutputDirectory();
 
-      // Lấy danh sách file ảnh
       const imageFiles = await this.getImageFiles();
 
       if (imageFiles.length === 0) {
@@ -35,7 +32,6 @@ class ImageProcessor {
 
       console.log(`Starting to process ${imageFiles.length} image files...`);
 
-      // Xử lý từng ảnh
       for (let i = 0; i < imageFiles.length; i++) {
         const file = imageFiles[i];
         if (file) {
@@ -55,7 +51,6 @@ class ImageProcessor {
   }
 
   private async validatePaths(): Promise<void> {
-    // Kiểm tra thư mục đầu vào
     try {
       await fs.access(this.config.inputDir);
     } catch {
@@ -64,7 +59,6 @@ class ImageProcessor {
       );
     }
 
-    // Kiểm tra file overlay
     try {
       await fs.access(this.config.overlayPath);
     } catch {
@@ -97,7 +91,6 @@ class ImageProcessor {
     const inputPath = path.join(this.config.inputDir, filename);
     const outputPath = path.join(this.config.outputDir, filename);
 
-    // Đọc overlay để lấy kích thước canvas
     const overlayImage = sharp(this.config.overlayPath);
     const overlayMetadata = await overlayImage.metadata();
 
@@ -107,7 +100,6 @@ class ImageProcessor {
       );
     }
 
-    // Đọc và resize ảnh gốc
     const image = sharp(inputPath);
     const metadata = await image.metadata();
 
@@ -115,29 +107,25 @@ class ImageProcessor {
       throw new Error(`Unable to read image dimensions: ${filename}`);
     }
 
-    // Calculate new height based on aspect ratio to maintain proportions
     const aspectRatio = metadata.height / metadata.width;
     const newHeight = Math.round(this.config.targetWidth * aspectRatio);
 
-    // Resize source image
     const resizedImageBuffer = await image
       .resize(this.config.targetWidth, newHeight, {
-        fit: "fill", // Maintain aspect ratio
+        fit: "fill",
       })
-      .png() // Convert to PNG for easier compositing
+      .png()
       .toBuffer();
 
-    // Create canvas with overlay dimensions
     const canvas = sharp({
       create: {
         width: overlayMetadata.width,
         height: overlayMetadata.height,
         channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 0 }, // Transparent background
+        background: { r: 255, g: 255, b: 255, alpha: 0 },
       },
     });
 
-    // Place resized image at x=404, y=232 and overlay at x=0, y=0
     await canvas
       .composite([
         {
@@ -156,7 +144,6 @@ class ImageProcessor {
   }
 }
 
-// Cấu hình mặc định
 const defaultConfig: ProcessingConfig = {
   inputDir: "./input",
   overlayPath: "./overlay.png",
@@ -165,12 +152,10 @@ const defaultConfig: ProcessingConfig = {
   targetWidth: 5192,
 };
 
-// Main function
 async function main() {
   console.log("🖼️  Image Overlay Processor");
   console.log("================================");
 
-  // Get configuration from command line arguments
   const config = getConfigFromArgs() || defaultConfig;
 
   console.log("Configuration:");
@@ -203,7 +188,6 @@ function getConfigFromArgs(): ProcessingConfig | null {
   };
 }
 
-// Run application
 if (import.meta.main) {
   main().catch(console.error);
 }
