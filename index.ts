@@ -4,10 +4,23 @@ import path from "path";
 
 interface ProcessingConfig {
   inputDir: string;
-  overlayPath: string;
+  horizontalOverlayPath: string;
+  verticalOverlayPath: string;
   outputDir: string;
-  overlayPosition: { x: number; y: number };
-  targetWidth: number;
+  horizontalWidthPercent: number;
+  verticalWidthPercent: number;
+}
+
+enum ImageOrientation {
+  HORIZONTAL = "horizontal",
+  VERTICAL = "vertical",
+}
+
+interface OverlayInfo {
+  path: string;
+  width: number;
+  height: number;
+  widthPercent: number;
 }
 
 class ImageProcessor {
@@ -60,10 +73,18 @@ class ImageProcessor {
     }
 
     try {
-      await fs.access(this.config.overlayPath);
+      await fs.access(this.config.horizontalOverlayPath);
     } catch {
       throw new Error(
-        `Overlay file does not exist: ${this.config.overlayPath}`
+        `Horizontal overlay file does not exist: ${this.config.horizontalOverlayPath}`
+      );
+    }
+
+    try {
+      await fs.access(this.config.verticalOverlayPath);
+    } catch {
+      throw new Error(
+        `Vertical overlay file does not exist: ${this.config.verticalOverlayPath}`
       );
     }
   }
@@ -87,31 +108,107 @@ class ImageProcessor {
     });
   }
 
-  private async processImage(filename: string): Promise<void> {
-    const inputPath = path.join(this.config.inputDir, filename);
-    const outputPath = path.join(this.config.outputDir, filename);
+  private detectOrientation(width: number, height: number): ImageOrientation {
+    return width > height
+      ? ImageOrientation.HORIZONTAL
+      : ImageOrientation.VERTICAL;
+  }
 
-    const overlayImage = sharp(this.config.overlayPath);
+  private async getOverlayInfo(
+    orientation: ImageOrientation
+  ): Promise<OverlayInfo> {
+    const overlayPath =
+      orientation === ImageOrientation.HORIZONTAL
+        ? this.config.horizontalOverlayPath
+        : this.config.verticalOverlayPath;
+
+    const widthPercent =
+      orientation === ImageOrientation.HORIZONTAL
+        ? this.config.horizontalWidthPercent
+        : this.config.verticalWidthPercent;
+
+    const overlayImage = sharp(overlayPath);
     const overlayMetadata = await overlayImage.metadata();
 
     if (!overlayMetadata.width || !overlayMetadata.height) {
       throw new Error(
-        `Unable to read overlay image dimensions: ${this.config.overlayPath}`
+        `Unable to read overlay image dimensions: ${overlayPath}`
       );
     }
 
-    const image = sharp(inputPath);
-    const metadata = await image.metadata();
+    return {
+      path: overlayPath,
+      width: overlayMetadata.width,
+      height: overlayMetadata.height,
+      widthPercent,
+    };
+  }
 
-    if (!metadata.width || !metadata.height) {
-      throw new Error(`Unable to read image dimensions: ${filename}`);
+  private calculateImageDimensions(
+    originalWidth: number,
+    originalHeight: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    widthPercent: number
+  ): { width: number; height: number; x: number; y: number } {
+    const targetWidth = Math.round(canvasWidth * (widthPercent / 100));
+    const aspectRatio = originalHeight / originalWidth;
+    const targetHeight = Math.round(targetWidth * aspectRatio);
+
+    const x = Math.round((canvasWidth - targetWidth) / 2);
+    const y = Math.round((canvasHeight - targetHeight) / 2);
+
+    return { width: targetWidth, height: targetHeight, x, y };
+  }
+
+  private async processImage(filename: string): Promise<void> {
+    const inputPath = path.join(this.config.inputDir, filename);
+    const outputPath = path.join(this.config.outputDir, filename);
+
+    const originalImage = sharp(inputPath);
+    const originalMetadata = await originalImage.metadata();
+
+    const rotatedImage = sharp(inputPath).rotate();
+
+    let finalWidth = originalMetadata.width!;
+    let finalHeight = originalMetadata.height!;
+
+    if (
+      originalMetadata.orientation &&
+      originalMetadata.orientation >= 5 &&
+      originalMetadata.orientation <= 8
+    ) {
+      finalWidth = originalMetadata.height!;
+      finalHeight = originalMetadata.width!;
     }
 
-    const aspectRatio = metadata.height / metadata.width;
-    const newHeight = Math.round(this.config.targetWidth * aspectRatio);
+    console.log(
+      `${filename} - Original: ${originalMetadata.width}x${
+        originalMetadata.height
+      }, EXIF: ${originalMetadata.orientation || "none"}`
+    );
+    console.log(
+      `${filename} - After auto-rotation: ${finalWidth}x${finalHeight}`
+    );
 
-    const resizedImageBuffer = await image
-      .resize(this.config.targetWidth, newHeight, {
+    const orientation = this.detectOrientation(finalWidth, finalHeight);
+
+    const overlayInfo = await this.getOverlayInfo(orientation);
+
+    const imageDimensions = this.calculateImageDimensions(
+      finalWidth,
+      finalHeight,
+      overlayInfo.width,
+      overlayInfo.height,
+      overlayInfo.widthPercent
+    );
+
+    console.log(
+      `Processing ${filename} as ${orientation} image (${finalWidth}x${finalHeight})`
+    );
+
+    const resizedImageBuffer = await rotatedImage
+      .resize(imageDimensions.width, imageDimensions.height, {
         fit: "fill",
       })
       .png()
@@ -119,8 +216,8 @@ class ImageProcessor {
 
     const canvas = sharp({
       create: {
-        width: overlayMetadata.width,
-        height: overlayMetadata.height,
+        width: overlayInfo.width,
+        height: overlayInfo.height,
         channels: 4,
         background: { r: 255, g: 255, b: 255, alpha: 0 },
       },
@@ -130,11 +227,11 @@ class ImageProcessor {
       .composite([
         {
           input: resizedImageBuffer,
-          left: this.config.overlayPosition.x,
-          top: this.config.overlayPosition.y,
+          left: imageDimensions.x,
+          top: imageDimensions.y,
         },
         {
-          input: this.config.overlayPath,
+          input: overlayInfo.path,
           left: 0,
           top: 0,
         },
@@ -146,26 +243,30 @@ class ImageProcessor {
 
 const defaultConfig: ProcessingConfig = {
   inputDir: "./input",
-  overlayPath: "./overlay.png",
+  horizontalOverlayPath: "./overlay-horizontal.png",
+  verticalOverlayPath: "./overlay-vertical.png",
   outputDir: "./output",
-  overlayPosition: { x: 404, y: 232 },
-  targetWidth: 5192,
+  horizontalWidthPercent: 82,
+  verticalWidthPercent: 79,
 };
 
 async function main() {
-  console.log("🖼️  Image Overlay Processor");
-  console.log("================================");
+  console.log("Image Overlay Processor (Optimized)");
+  console.log("=========================================");
 
   const config = getConfigFromArgs() || defaultConfig;
 
   console.log("Configuration:");
   console.log(`- Input directory: ${config.inputDir}`);
-  console.log(`- Overlay file: ${config.overlayPath}`);
+  console.log(`- Horizontal overlay: ${config.horizontalOverlayPath}`);
+  console.log(`- Vertical overlay: ${config.verticalOverlayPath}`);
   console.log(`- Output directory: ${config.outputDir}`);
   console.log(
-    `- Overlay position: x=${config.overlayPosition.x}, y=${config.overlayPosition.y}`
+    `- Horizontal image width: ${config.horizontalWidthPercent}% of canvas`
   );
-  console.log(`- Target width: ${config.targetWidth}px`);
+  console.log(
+    `- Vertical image width: ${config.verticalWidthPercent}% of canvas`
+  );
   console.log("");
 
   const processor = new ImageProcessor(config);
@@ -181,10 +282,11 @@ function getConfigFromArgs(): ProcessingConfig | null {
 
   return {
     inputDir: args[0] || defaultConfig.inputDir,
-    overlayPath: args[1] || defaultConfig.overlayPath,
-    outputDir: args[2] || defaultConfig.outputDir,
-    overlayPosition: defaultConfig.overlayPosition,
-    targetWidth: defaultConfig.targetWidth,
+    horizontalOverlayPath: args[1] || defaultConfig.horizontalOverlayPath,
+    verticalOverlayPath: args[2] || defaultConfig.verticalOverlayPath,
+    outputDir: args[3] || defaultConfig.outputDir,
+    horizontalWidthPercent: defaultConfig.horizontalWidthPercent,
+    verticalWidthPercent: defaultConfig.verticalWidthPercent,
   };
 }
 

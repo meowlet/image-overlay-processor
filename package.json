@@ -1,10 +1,31 @@
 {
-  "name": "image-processor",
-  "module": "index.ts",
+  "name": "image-overlay-processor",
+  "version": "1.0.0",
+  "description": "A high-performance TypeScript application for batch processing images with orientation-aware overlay application",
+  "main": "src/main.ts",
+  "module": "src/main.ts",
   "type": "module",
+  "keywords": [
+    "image-processing",
+    "overlay",
+    "batch-processing",
+    "typescript",
+    "sharp",
+    "bun"
+  ],
+  "author": "meowlet",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meowlet/image-overlay-processor.git"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "scripts": {
-    "start": "bun run index.ts",
-    "dev": "bun run --watch index.ts"
+    "start": "bun run src/main.ts",
+    "dev": "bun run --watch src/main.ts",
+    "build": "bun build --compile --minify --sourcemap ./src/main.ts --outfile ./image-overlay-processor.exe"
   },
   "devDependencies": {
     "@types/bun": "latest",

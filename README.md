@@ -1,90 +1,126 @@
 # Image Overlay Processor
 
-Ứng dụng TypeScript để overlay ảnh với file overlay PNG (có transparent) lên tất cả ảnh trong một thư mục.
+TypeScript xử lý ảnh hàng loạt với overlay tự động theo orientation. Tự động phát hiện hướng ảnh và áp dụng overlay phù hợp.
 
 ## Tính năng
 
-- Resize ảnh gốc về width 5192px (giữ nguyên tỷ lệ)
-- Overlay ảnh PNG lên vị trí x=404, y=232
-- Xử lý hàng loạt tất cả ảnh trong thư mục
-- Hỗ trợ các định dạng: JPG, JPEG, PNG, BMP, TIFF, WEBP
+- **Orientation Detection**: Tự động phát hiện ảnh ngang/dọc
+- **Overlay Application**: Sử dụng overlay khác nhau cho ảnh ngang và dọc
+- **Scaling**: Giữ tỷ lệ ảnh với width percentage có thể cấu hình
+- **EXIF Rotation Handling**: Xử lý đúng metadata xoay ảnh
+- **High Performance**: Xây dựng với Sharp để xử lý ảnh nhanh
+- **Batch Processing**: Xử lý toàn bộ thư mục ảnh
+- **Format Support**: Hỗ trợ JPG, JPEG, PNG, BMP, TIFF, WEBP
+- **Configurable**: Có thể tùy chỉnh đường dẫn input/output và overlay settings
 
 ## Cài đặt
 
 ```bash
+# Clone repository
+git clone https://github.com/meowlet/image-overlay-processor.git
+cd image-overlay-processor
+
+# Cài đặt dependencies
 bun install
 ```
 
-## Cách sử dụng
+## Sử dụng
 
-### 1. Chuẩn bị
+### Basic
 
-- Tạo thư mục `input` và đặt các ảnh cần xử lý vào đó
-- Đặt file overlay PNG có tên `overlay.png` ở thư mục gốc
-- Kết quả sẽ được lưu trong thư mục `output`
+1. **Chuẩn bị file**:
 
-### 2. Chạy ứng dụng
+   - Đặt ảnh cần xử lý vào thư mục `input/`
+   - Đảm bảo có file overlay: `overlay-horizontal.png` và `overlay-vertical.png`
 
-#### Với cấu hình mặc định:
+2. **Chạy processor**:
 
-```bash
-bun start
-```
+   ```bash
+   bun start
+   ```
 
-#### Với thư mục tùy chỉnh:
+3. **Kiểm tra kết quả**: Ảnh đã xử lý sẽ được lưu trong thư mục `output/`
 
-```bash
-bun start [thư_mục_đầu_vào] [file_overlay] [thư_mục_đầu_ra]
-```
-
-Ví dụ:
+### Advanced
 
 ```bash
-bun start ./my-images ./my-overlay.png ./processed-images
+# Custom configuration
+bun start [input_dir] [horizontal_overlay] [vertical_overlay] [output_dir]
+
+# Ví dụ
+bun start ./my-images ./overlays/h-overlay.png ./overlays/v-overlay.png ./processed
 ```
 
-## Cấu hình mặc định
+## Configuration
 
-- **Thư mục đầu vào**: `./input`
-- **File overlay**: `./overlay.png`
-- **Thư mục đầu ra**: `./output`
-- **Vị trí overlay**: x=404, y=232
-- **Chiều rộng mục tiêu**: 5192px
+### Mặc định
 
-## Cấu trúc thư mục
+| Setting            | Giá trị                    | Mô tả                               |
+| ------------------ | -------------------------- | ----------------------------------- |
+| Input Directory    | `./input`                  | Vị trí ảnh nguồn                    |
+| Horizontal Overlay | `./overlay-horizontal.png` | Overlay cho ảnh ngang               |
+| Vertical Overlay   | `./overlay-vertical.png`   | Overlay cho ảnh dọc                 |
+| Output Directory   | `./output`                 | Thư mục lưu ảnh đã xử lý            |
+| Horizontal Width % | `82%`                      | Width ảnh so với canvas (landscape) |
+| Vertical Width %   | `79%`                      | Width ảnh so với canvas (portrait)  |
+
+### Tùy chỉnh Configuration
+
+Sửa đổi cấu hình mặc định trong `src/config/index.ts`:
+
+```typescript
+export const defaultConfig: ProcessingConfig = {
+  inputDir: "./input",
+  horizontalOverlayPath: "./overlay-horizontal.png",
+  verticalOverlayPath: "./overlay-vertical.png",
+  outputDir: "./output",
+  horizontalWidthPercent: 82,
+  verticalWidthPercent: 79,
+};
+```
+
+## Cấu trúc Project
 
 ```
-image-processor/
-├── input/           # Đặt ảnh gốc vào đây
-│   ├── image1.jpg
-│   ├── image2.png
-│   └── ...
-├── overlay.png      # File overlay (PNG với transparent)
-├── output/          # Ảnh đã xử lý sẽ được lưu ở đây
-├── index.ts         # File chính
+image-overlay-processor/
+├── src/
+│   ├── config/
+│   │   └── index.ts              # Configuration management
+│   ├── services/
+│   │   ├── imageProcessor.ts     # Logic xử lý chính
+│   │   └── overlayService.ts     # Xử lý overlay
+│   ├── types/
+│   │   └── index.ts              # TypeScript type definitions
+│   ├── utils/
+│   │   ├── fileSystem.ts         # Thao tác file system
+│   │   └── imageUtils.ts         # Utility functions cho ảnh
+│   └── main.ts                   # Entry point của application
+├── input/                        # Ảnh nguồn (tạo thư mục này)
+├── output/                       # Ảnh đã xử lý (tự động tạo)
+├── overlay-horizontal.png        # Overlay cho ảnh ngang
+├── overlay-vertical.png          # Overlay cho ảnh dọc
 └── package.json
 ```
 
-## Yêu cầu hệ thống
+## Development
 
-- Bun runtime
-- Node.js (để chạy Sharp)
-
-## Dependencies
-
-- **sharp**: Thư viện xử lý ảnh hiệu suất cao
-- **@types/node**: Type definitions cho Node.js
-
-To install dependencies:
+### Available Scripts
 
 ```bash
-bun install
+# Development với hot reload
+bun run dev
+
+# Production build
+bun run build
+
+# Start application
+bun start
 ```
 
-To run:
+### Build cho Production
 
 ```bash
-bun run index.ts
+bun run build
 ```
 
-This project was created using `bun init` in bun v1.2.15. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+Tạo file executable standalone `image-overlay-processor.exe` với tất cả dependencies.
